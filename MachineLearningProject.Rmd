@@ -1,0 +1,107 @@
+---
+title: "Machine Learning Project - Predicting Exercise Type"
+author: "Otto Angulo"
+output: html_document
+---
+
+## Approach:
+
+The variable that will be used for the outcome of the model is **classe** which is an unordered factor variable. The data set contains information where participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in 5 different way:  
+* Class A - exactly according to the specification  
+* Class B - throwing the elbows to the front  
+* Class C - lifting the dumbbell only halfway  
+* Class D - lowering the dumbbell only halfway  
+* Class E - throwing the hips to the front  
+
+Two models will be created and tested using decision tree and random forest. The model with the highest accuracy will be selected as our final model.
+
+Cross-validation will be performed with training data set randomly without replacement into:  
+* TrainTrainingSet data (75%)  
+* TestTrainingSet data (25%)  
+
+The models will be fitted using TrainTrainingSet data set and then tested on the TestTrainingSet data. This will allow us to select the most accurate model and apply it to original Testing data set.
+
+To make sure that we have the correct proportion of classified observations in sample the expected out-of-sample error will correspond to the quantity: 1-accuracy in the cross-validation data set.
+
+As mention above **classe** is an unordered factor variable the reason we chose the error type as 1-accuracy. Due to the size of the training data set we are able to divide into TrainTrainingSet data (75%) and TestTrainingSet data (25%) to allow cross-validation. One thing that will be done is discard Features with missing values and that are irrelevant. We will be doing this using decision tree and random forest algorithms.
+
+```{r warning=FALSE}
+# Install packages and load the required libraries
+# install.packages("caret"); install.packages("randomForest"); install.packages("rpart"); install.packages("rpart.plot");
+library(lattice); library(ggplot2); library(caret); library(randomForest); library(rpart); library(rpart.plot);
+```
+
+```{r}
+# Set seed
+set.seed(1234)
+
+# Load data and clean up
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+trainingset <- read.csv(url(trainUrl), na.strings=c("NA","#DIV/0!",""))
+testingset <- read.csv(url(testUrl), na.strings=c("NA","#DIV/0!",""))
+
+# Delete columns with missing values
+trainingset<-trainingset[,colSums(is.na(trainingset)) == 0]
+testingset <-testingset[,colSums(is.na(testingset)) == 0]
+
+# Delete irrelevant variables: user_name, raw_timestamp_part_1, raw_timestamp_part_,2 cvtd_timestamp, new_window, and  num_window (columns 1 to 7). 
+trainingset   <-trainingset[,-c(1:7)]
+testingset <-testingset[,-c(1:7)]
+
+# Partition the training data: 75% training and 25% to testing
+traintrainset <- createDataPartition(y=trainingset$classe, p=0.75, list=FALSE)
+TrainTrainingSet <- trainingset[traintrainset, ] 
+TestTrainingSet <- trainingset[-traintrainset, ]
+```
+
+## Prediction Models (Decision Tree or Random Forest)
+
+```{r}
+# Model 1 - Decision Tree
+model1 <- rpart(classe ~ ., data=TrainTrainingSet, method="class")
+prediction1 <- predict(model1, TestTrainingSet, type = "class")
+
+# Plot the Decision Tree
+rpart.plot(model1, main="Classification Tree", extra=102, under=TRUE, faclen=0)
+```
+
+```{r}
+# Test Prediction Model 1 TestTrainingSet data set:
+confusionMatrix(prediction1, TestTrainingSet$classe)
+```
+
+```{r}
+# Model 2 - Random Forest
+model2 <- randomForest(classe ~. , data=TrainTrainingSet, method="class")
+prediction2 <- predict(model2, TestTrainingSet, type = "class")
+
+# Test Prediction Model 2 TestTrainingSet data set:
+confusionMatrix(prediction2, TestTrainingSet$classe)
+```
+
+## Prediction Model Selection:
+Random Forest algorithm performed better than Decision Trees and is the prediction model that will used for the testing data set.  
+* Accuracy for Random Forest model: 0.995 (95% CI: (0.993, 0.997))  
+* Decision Tree model with 0.739 (95% CI: (0.727, 0.752))  
+* Expected out-of-sample error is estimated at 0.5%
+
+## Submission using Random Forest on Testing Data Set
+
+```{r}
+# Predict levels on Testing data set using Random Forest model
+predictTesting <- predict(model2, testingset, type="class")
+predictTesting
+
+# File creation for submission
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(predictTesting)
+```
+
